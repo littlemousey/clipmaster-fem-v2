@@ -1,7 +1,8 @@
-import React from 'react';
-import { render } from 'react-dom';
+import React from "react";
+import { render } from "react-dom";
 
-import { clipboard, ipcRenderer } from 'electron';
+import { clipboard, ipcRenderer } from "electron";
+import database from "./database";
 
 const writeToClipboard = content => {
   clipboard.writeText(content);
@@ -13,36 +14,49 @@ class Application extends React.Component {
     this.state = {
       clippings: [
         {
-          content: 'Lol',
-          id: 123,
-        },
-      ],
+          content: "Lol",
+          id: 123
+        }
+      ]
     };
 
     this.addClipping = this.addClipping.bind(this);
+    this.fetchClippings = this.fetchClippings.bind(this);
     this.handleWriteToClipboard = this.handleWriteToClipboard.bind(this);
+    this.handleRemove = this.handleRemove.bind(this);
   }
 
   componentDidMount() {
-    ipcRenderer.on('create-new-clipping', this.addClipping);
+    ipcRenderer.on("create-new-clipping", this.addClipping);
+    ipcRenderer.on("write-to-clipboard", this.handleWriteToClipboard);
+
+    this.fetchClippings();
+  }
+
+  fetchClippings() {
+    database("clippings")
+      .select()
+      .then(clippings => this.setState({ clippings }));
   }
 
   addClipping() {
-    const { clippings } = this.state;
-
     const content = clipboard.readText();
-    const id = Date.now();
 
-    const clipping = { id, content };
-
-    this.setState({
-      clippings: [clipping, ...clippings],
-    });
+    database("clippings")
+      .insert({ content })
+      .then(this.fetchClippings);
   }
 
   handleWriteToClipboard() {
     const clipping = this.state.clippings[0];
-    if (clipping) writeToClipboard(clipping);
+    if (clipping) writeToClipboard(clipping.content);
+  }
+
+  handleRemove(id) {
+    database("clippings")
+      .where("id", id)
+      .delete()
+      .then(this.fetchClippings);
   }
 
   render() {
@@ -57,7 +71,12 @@ class Application extends React.Component {
         <section className="content">
           <div className="clippings-list">
             {this.state.clippings.map(clipping => (
-              <Clipping content={clipping.content} key={clipping.id} />
+              <Clipping
+                content={clipping.content}
+                id={clipping.id}
+                key={clipping.id}
+                onRemove={this.handleRemove}
+              />
             ))}
           </div>
         </section>
@@ -66,7 +85,7 @@ class Application extends React.Component {
   }
 }
 
-const Clipping = ({ content }) => {
+const Clipping = ({ content, id, onRemove }) => {
   return (
     <article className="clippings-list-item">
       <div className="clipping-text" disabled>
@@ -77,9 +96,12 @@ const Clipping = ({ content }) => {
           &rarr; Clipboard
         </button>
         <button>Update</button>
+        <button className="remove-clipping" onClick={() => onRemove(id)}>
+          Remove
+        </button>
       </div>
     </article>
   );
 };
 
-render(<Application />, document.getElementById('application'));
+render(<Application />, document.getElementById("application"));
